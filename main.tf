@@ -1,161 +1,95 @@
-# terraform provider
+# Provider and Terraform Configuration 
+
 terraform {
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.16"
+    google = {
+      source  = "hashicorp/google"
+      version = "4.55.0"
     }
   }
-
   required_version = ">= 1.2.0"
 }
 
-# aws provider
-provider "aws" {
-  region     = var.REGION
+provider "google" {
+  project = var.PROJECT_ID
+  region  = var.REGION
+  zone    = var.ZONE
 }
 
-# ec2 instances
-resource "aws_instance" "node_server" {
+# Network and Subnet Creation
+resource "google_compute_network" "vpc_network" {
+  name                    = var.NETWORK_NAME
+  auto_create_subnetworks = false
+  mtu                     = 1460
+}
+resource "google_compute_subnetwork" "public-subnetwork" {
+  name          = var.SUBNET_NAME
+  ip_cidr_range = var.SUBNET_CIDR_RANGE
+  region        = var.REGION
+  network       = google_compute_network.vpc_network.name
+
+}
+
+# Reserve Static IP Address
+resource "google_compute_address" "static_ip" {
   count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT + var.ARCHIVE_COUNT)
-  ami                    = var.INSTANCE_AMI
-  instance_type          = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_INSTANCE_TYPE: var.INSTANCE_TYPE
-  key_name               = var.PEM_FILE
-  vpc_security_group_ids = [aws_security_group.internet_facing_load_balancer_sg.id]
-  subnet_id              = aws_subnet.devnet_public_subnet.id
-
-  # instances' disks
-  ebs_block_device {
-    device_name = "/dev/sda1"
-    volume_size = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_DISK_SIZE_GB : var.DISK_SIZE_GB
-    volume_type = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_VOLUME_TYPE : var.VOLUME_TYPE
-    iops = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT ) ? var.ARCHIVE_IOPS : var.IOPS
-  }
-
-  tags = {
-    Name = "${var.VM_NAME}_${count.index + 1}"
-  }
+  name = format("%s-%s",var.VM_NAME, count.index)
+         
 }
 
-# elastic ips
-resource "aws_eip" "eip" {
-  vpc = true
-  count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT + var.ARCHIVE_COUNT)
-  instance                  = aws_instance.node_server[count.index].id
-  depends_on                = [aws_internet_gateway.devnet_internet_gateway]
 
-  tags = {
-    Name = "${var.VM_NAME}_${count.index + 1}_eip"
-  }
-}
+# GCP Compute VM using Machine Image
+resource "google_compute_instance" "node_server" {
 
-# elastic ips association
-resource "aws_eip_association" "eip_association" {
-  count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT + var.ARCHIVE_COUNT)
-  instance_id   = aws_instance.node_server[count.index].id
-  allocation_id = aws_eip.eip[count.index].id
-}
+  count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT)
 
-# security group
-resource "aws_security_group" "internet_facing_load_balancer_sg" {
-  name        = "internet_facing_loadbalancer_sg"
-  description = "security group attached to internet facing loadbalancer"
-  vpc_id      = aws_vpc.devnet_vpc.id
+  name         = format("%s-%s",var.VM_NAME, count.index)
+  machine_type = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_MACHINE_TYPE: var.MACHINE_TYPE
 
-  dynamic "ingress" {
-    for_each = toset(var.PORTS_IN)
-    content {
-      description = "web traffic from internet"
-      from_port   = ingress.value
-      to_port     = ingress.value
-      protocol    = "tcp"
-      cidr_blocks = concat(var.SG_CIDR_BLOCKS, [aws_vpc.devnet_vpc.cidr_block])
-      self = true
+  boot_disk {
+    initialize_params {
+      image = var.INSTANCE_IMAGE
+      size = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_DISK_SIZE_GB : var.DISK_SIZE_GB
+      type = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_VOLUME_TYPE : var.VOLUME_TYPE
     }
   }
-  dynamic "egress" {
-    for_each = toset(var.PORTS_OUT)
-    content {
-      description = "web traffic to internet"
-      from_port   = egress.value
-      to_port     = egress.value
-      protocol    = "-1"
-      cidr_blocks = var.SG_CIDR_BLOCKS_OUT
-      self = true
+
+  metadata = {
+    ssh-keys = "${var.USER}::${file(var.GCE_PUB_KEY_FILE)}"
+  }
+
+  network_interface {
+    network = google_compute_network.vpc_network.name
+    subnetwork = google_compute_subnetwork.public-subnetwork.name
+
+    access_config {
+      //IP
+      nat_ip = google_compute_address.static_ip[count.index].address
     }
   }
-  tags = {
-    Name = "${var.VM_NAME}_internet_facing_loadbalancer_sg"
+  tags = ["matic-cli"]
+  labels = {
+    name = "polygon-matic"
   }
 }
 
+resource "google_compute_firewall" "firewall_rules" {
+  name    = var.FW_RULE_NAME
+  network = google_compute_network.vpc_network.name
 
-# public subnet
-variable "devnet_public_subnet" {
-  default     = "10.0.0.0/24"
-  description = "devnet_public_subnet"
-  type        = string
-}
-
-resource "aws_subnet" "devnet_public_subnet" {
-  vpc_id                  = aws_vpc.devnet_vpc.id
-  cidr_block              = var.devnet_public_subnet
-  availability_zone       = "us-west-2a"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "${var.VM_NAME}_public_subnet"
+  allow {
+    protocol = "tcp"
+    ports    = var.PORTS_LIST
   }
+  source_ranges = var.SG_CIDR_BLOCKS
 }
 
 
-# vpc
-resource "aws_vpc" "devnet_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  instance_tenancy     = "default"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-
-  tags = {
-    Name = "${var.VM_NAME}_vpc"
-  }
-}
-
-# internet gateway
-resource "aws_internet_gateway" "devnet_internet_gateway" {
-  vpc_id = aws_vpc.devnet_vpc.id
-  tags = {
-    Name = "${var.VM_NAME}_intenet_gateway"
-  }
-}
-
-# route table
-resource "aws_route_table" "devnet_route_table" {
-  vpc_id = aws_vpc.devnet_vpc.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.devnet_internet_gateway.id
-  }
-  tags = {
-    Name = "${var.VM_NAME}_route_table"
-  }
-}
-
-# route table association
-resource "aws_main_route_table_association" "route_table_association" {
-  vpc_id         = aws_vpc.devnet_vpc.id
-  route_table_id = aws_route_table.devnet_route_table.id
-}
-
-# output variables used by express-cli
-output "instance_ips" {
-  value = aws_eip.eip.*.public_ip
-}
-
-output "instance_dns_ips" {
-  value = aws_eip.eip.*.public_dns
+# output values
+output "public_ip" {
+  value = google_compute_address.static_ip.*.address
 }
 
 output "instance_ids" {
-  value = aws_instance.node_server.*.id
+  value = google_compute_instance.node_server.*.name 
 }

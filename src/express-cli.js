@@ -82,8 +82,8 @@ program
   )
   .option('-dd, --setup-datadog', 'Setup DataDog')
   .option('-xxx, --chaos [intensity]', 'Start Chaos')
-  .option('-istop, --instances-stop', 'Stop aws ec2 instances')
-  .option('-istart, --instances-start', 'Start aws ec2 instances')
+  .option('-istop, --instances-stop', 'Stop GCP compute instances')
+  .option('-istart, --instances-start', 'Start GCP compute instances')
   .option('-rewind, --rewind [numberOfBlocks]', 'Rewind the chain')
   .version(pkg.version)
 

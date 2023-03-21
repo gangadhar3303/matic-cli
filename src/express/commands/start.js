@@ -397,7 +397,7 @@ export async function start() {
 
   await terraformApply(devnetId)
   const tfOutput = await terraformOutput()
-  const dnsIps = JSON.parse(tfOutput).instance_dns_ips.value.toString()
+  const dnsIps = JSON.parse(tfOutput).public_ip.value.toString()
   const ids = JSON.parse(tfOutput).instance_ids.value.toString()
   process.env.DEVNET_BOR_HOSTS = dnsIps
   process.env.INSTANCES_IDS = ids

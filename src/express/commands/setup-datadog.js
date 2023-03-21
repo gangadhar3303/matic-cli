@@ -29,6 +29,11 @@ export async function setDatadogAPIKey(value, doc) {
 }
 
 export async function setupDatadog() {
+
+  // TODO: Fix for GCP
+  console.log('📍Not supported for datadog at the moment')
+  return
+
   let doc
   require('dotenv').config({ path: `${process.cwd()}/.env` })
 

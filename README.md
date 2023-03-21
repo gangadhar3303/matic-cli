@@ -1,14 +1,16 @@
 # Testing Toolkit
 
+> Please note that this repository is currently being tested for GCP compatibility with express-cli, and not all features may function properly.
+
 🏗 A set of CLIs, tools and tests to set up, manage and operate Polygon devnets.
 
 The **Testing Toolkit** is built on top of `express-cli`, an extension of `matic-cli` which uses `terraform` to deploy,
-test and monitor any devnet on AWS stacks from any local system.
+test and monitor any devnet on GCP from any local system.
 
 It currently supports **only** devnets running `v0.3.x` stacks.
 
-The `express-cli` interacts with `terraform` to create a fully working setup on AWS.  
-This setup is composed by a set of `EC2 VM` instances running a specific `ubuntu 22.04 ami`, mounted with `gp3 disks` ,
+The `express-cli` interacts with `terraform` to create a fully working setup on GCP.  
+This setup is composed by a set of `GCP Compute` instances running a specific `ubuntu 22.04 images`,
 and a `public-subnet` with its `VPC`.  
 In case the infrastructure already exists, `matic-cli` can be used as a standalone tool to deploy Polygon stacks on
 pre-configured VMs.
@@ -17,21 +19,33 @@ Please, refer to the section of this file you are more interested in (`express-c
 
 ## `express-cli`
 
+### TODO
+
+- [x] Convert the terraform and node js scripts to work with GCP infra
+- [x] Check most of the express cli commands are working
+- [ ] Work with multiple devnets at the same time
+- [ ] Test with dockerized == 'yes'
+- [ ] Test with enabling archival node
+- [ ] Test with adding PD (currently it tested with boot disk)
+- [ ] Enable datadog integration
+- [ ] More validations
+- [ ] Test with more GCP machine types
+
 ### Requirements
 
 To use the `express-cli` you have to execute the following steps.
 
-- [install aws cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- [install gcloud cli](https://cloud.google.com/sdk/docs/install)
 - [install terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli) on your local machine
 - use [nvm](https://github.com/nvm-sh/nvm#installing-and-updating) to switch to the proper `node` version, `v16.17.1`,
   by running `nvm use` from the root folder
 - install `express-cli` and `matic-cli` locally with command `npm i`
-- generate a keypair on AWS EC2 and download its certificate locally (`.pem` file)
+- generate a keypair locally (`.pem` and `.pem.pub` files) using `ssh-keygen`
 - copy `secret.tfvars.example` to `secret.tfvar` with command `cp secret.tfvars.example secret.tfvars` and check the commented file for details
 - **If you are a Polygon employee**, connect to the company VPN
 - modify `secret.tfvar` with addresses of the allowed IPs (as specified in `secret.tfvars.example` file)
 - copy `.env.example` to `.env` with command `cp .env.example .env` and check the heavily commented file for details
-- make sure `PEM_FILE_PATH` points to a correct AWS key certificate, the one you downloaded in the previous steps
+- make sure `PEM_FILE_PATH` points to a correct key certificate, the one you downloaded in the previous steps
 - define the number of nodes (`TF_VAR_VALIDATOR_COUNT` and `TF_VAR_SENTRY_COUNT`) and adjust the `DEVNET_BOR_USERS`
   accordingly
 - use `TF_VAR_DOCKERZIED=no` to have one VM per node, otherwise the stack will run on one VM only in a dockerized environment
@@ -43,73 +57,17 @@ To use the `express-cli` you have to execute the following steps.
 
 ### Auth Configuration
 
-As a prerequisite, you need to configure authentication on `aws`  
-This will create the folder `~/.aws` in your system
-To do so, please run
+As a prerequisite, you need to configure authentication on `gcloud`.
+
+If you have downloaded the service account credentials, you can use the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to provide the location of thst credential JSON file. 
 
 ```bash
-aws configure sso
+gcloud auth application-default login
+
+# OR
+
+export GOOGLE_APPLICATION_CREDENTIALS='/absolute/path/to/sa/creds.json'
 ```
-
-This command will interactively ask for some configs
-**If you are a Polygon employee**, please use the following
-
-- SSO session name: leave empty
-- SSO start URL: https://polygon-technology.awsapps.com/start#/
-- SSO region: us-east-1
-
-The browser will open and authorize your request. Please allow it.
-
-In case there are multiple accounts available to you, please select
-
-> posv1-devnet
-
-Then, the command will ask for other configs, please use
-
-- CLI default client Region: us-west-2
-- CLI default output format: json
-- CLI profile name: default
-
-Note that it's **mandatory** to use `CLI profile name: default`, as used by `terraform` in `express-cli` (for more context see [this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs))
-
-Here an output example
-
-```bash
-SSO session name (Recommended):
-WARNING: Configuring using legacy format (e.g. without an SSO session).
-Consider re-running "configure sso" command and providing a session name.
-SSO start URL [None]: https://polygon-technology.awsapps.com/start#/
-SSO region [None]: us-east-1
-Attempting to automatically open the SSO authorization page in your default browser.
-If the browser does not open or you wish to use a different device to authorize this request, open the following URL:
-
-https://device.sso.us-east-1.amazonaws.com/
-
-Then enter the code:
-
-<CODE-HERE>
-
-There are 2 AWS accounts available to you.
-
-Using the account ID <ACCOUNT_ID>
-The only role available to you is: <AWSRole> (<AWS_ROLE_ID>)
-Using the role name "<AWS_ROLE>"
-CLI default client Region [None]: us-west-2
-CLI default output format [None]: json
-CLI profile name [<PROFILE_NAME_AND_ID>]: default
-
-To use this profile, specify the profile name using --profile, as shown:
-
-aws s3 ls --profile default
-```
-
-Now you can log into aws by running the following command. It needs to be executed every time the token expires.
-
-```bash
-aws sso login
-```
-
-Congrats! You're all set to use `express-cli` commands.
 
 ### Commands
 
@@ -128,8 +86,8 @@ First off, you need to `--init` terraform on your local machine, by executing th
 - `../../bin/express-cli --start`
 
   - Creates the desired remote setup, based on the preferences defined in the `.env.devnet<id>` file
-  - `--start` command can be used also to target an existing AWS setup. If changes to `.env.devnet<id>` file are detected, the
-    previous devnet will be destroyed and a new one created, reusing the same AWS VMs  
+  - `--start` command can be used also to target an existing GCO setup. If changes to `.env.devnet<id>` file are detected, the
+    previous devnet will be destroyed and a new one created, reusing the same GCP VMs  
      To destroy the remote devnet, you can execute the `--destroy` command.
 
 - `../../bin/express-cli --destroy`
@@ -207,11 +165,11 @@ The `express-cli` also comes with additional utility commands, listed below. Som
 
 - ` ../../bin/express-cli --instances-stop`
 
-  - Stop the AWS EC2 VM instances associated with the deployed devnet.
+  - Stop the GCP compute VM instances associated with the deployed devnet.
 
 - ` ../../bin/express-cli --instances-start`
 
-  - Start the (previously stopped) AWS EC2 VM instances associated with the deployed devnet. Also, it starts all services, such as ganache, heimdall, and bor
+  - Start the (previously stopped) GCP compute instances associated with the deployed devnet. Also, it starts all services, such as ganache, heimdall, and bor
 
 - `../../bin/express-cli --stress [fund]`
 
