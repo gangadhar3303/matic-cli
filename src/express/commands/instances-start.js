@@ -21,11 +21,12 @@ export async function startInstances() {
     process.env.TF_VAR_DOCKERIZED === 'yes' ? 'docker' : 'remote'
   const doc = await loadDevnetConfig(devnetType)
   const instances = doc.instancesIds.toString().replace(/,/g, ' ')
+  const zone = doc.devnetZone.toString()
 
-  shell.exec(`aws ec2 start-instances --instance-ids ${instances}`)
+  shell.exec(`gcloud compute instances start ${instances} --zone ${zone}`)
   if (shell.error() !== null) {
     console.log(
-      `📍Starting instances ${doc.instancesIds.toString()} didn't work. Please check AWS manually`
+      `📍Starting instances ${doc.instancesIds.toString()} didn't work. Please check GCP manually`
     )
   } else {
     console.log(`📍Instances ${doc.instancesIds.toString()} are starting...`)

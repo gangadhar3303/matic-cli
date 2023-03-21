@@ -1,11 +1,73 @@
-variable "AWS_PROFILE" {
-  type    = string
-  default = "default"
+# Global Variables
+
+variable "PROJECT_ID" {
+  type = string
+  description = "GCP Project ID"
 }
+
+variable "REGION" {
+  type = string
+  description = "Region of the GCP Resouce in which it needs to be provisioned"
+  default = "us-central1"
+}
+
+variable "ZONE" {
+  type = string
+  description = "Zone of the GCP Resource in hich it needs to be provisioned"
+  default = "us-central1-a"
+}
+
+variable "DOCKERIZED" {
+  default = "no"
+}
+
+# Network and Subnet Creation
+
+variable "NETWORK_NAME" {
+  type = string
+  description = "Name of the GCP compute network"
+  default = "devnet"
+}
+
+variable "SUBNET_NAME" {
+  type = string
+  description = "Name of the subnetwork in GCP Project" 
+  default = "devnet-subnetwork" 
+}
+
+variable "SUBNET_CIDR_RANGE" {
+  type = string
+  description = "CIDR range for the Subnetwork"  
+  default = "10.0.0.0/16"
+}
+
+variable "FW_RULE_NAME" {
+  type = string
+  description = "Name for the GCP firewall ingress rules"
+  default = "devnet-ingress"
+}
+
+variable "PORTS_LIST" {
+  type = list
+  description = "List of all the required port numbers for the matic CLI"
+  default = [22, 80, 443, 30303, 1317, 8545, 9545, 1337, 8546, 26656]
+}
+
+# Compute Instance Variables
 
 variable "VM_NAME" {
   type    = string
   default = "polygon-user"
+}
+
+variable "MACHINE_TYPE" {
+  default = "c3-highcpu-22"
+  description = "Type of the Compute VM instance"
+}
+
+variable "ARCHIVE_MACHINE_TYPE" {
+  default = "c3-highcpu-22"
+  description = "Type of the Compute VM instance"
 }
 
 variable "DISK_SIZE_GB" {
@@ -16,23 +78,12 @@ variable "ARCHIVE_DISK_SIZE_GB" {
   default = "100"
 }
 
-variable "IOPS" {
-  default = 3000
-}
-
-variable "ARCHIVE_IOPS" {
-  default = 3000
-}
-
 variable "VOLUME_TYPE" {
-  default = "gp3"
+  default = "pd-ssd"
 }
 
 variable "ARCHIVE_VOLUME_TYPE" {
-  default = "io1"
-}
-variable "DOCKERIZED" {
-  default = "no"
+  default = "pd-ssd"
 }
 
 variable "VALIDATOR_COUNT" {
@@ -46,51 +97,20 @@ variable "SENTRY_COUNT" {
 variable "ARCHIVE_COUNT" {
   default = "0"
 }
-variable "INSTANCE_TYPE" {
-  default = "t2.xlarge"
+
+variable "INSTANCE_IMAGE" {
+  default = "ubuntu-2204-jammy-v20230302"
 }
 
-variable "ARCHIVE_INSTANCE_TYPE" {
-  default = "t2.xlarge"
+variable "USER" {
+  type = string
+  default = "ubuntu"
 }
 
-variable "INSTANCE_AMI" {
-  default = "ami-017fecd1353bcc96e"
-}
-
-variable "PEM_FILE" {
-  default = "aws-key"
-}
-
-variable "REGION" {
-  default = "us-west-2"
+variable "GCE_PUB_KEY_FILE" {
+  type = string
 }
 
 variable "SG_CIDR_BLOCKS" {
-  description = "Contains allowed IPs. Please, set them into secret.tfvars (example available at secret.tfvars.example)"
-  sensitive = true
-}
-
-variable "SG_CIDR_BLOCKS_OUT" {
-  default = ["0.0.0.0/0"]
-}
-
-// set ports to be opened in security group for incoming
-variable "PORTS_IN" {
-  // 22: ssh
-  // 80: http
-  // 443: https ssl enabled
-  // 30303: p2p bor
-  // 1317: heimdall
-  // 8545: bor https
-  // 8546: bor rpc websockets
-  // 9545: ganache
-  // 1337:
-  // 26656: heimdall comms
-  default = [22, 80, 443, 30303, 1317, 8545, 9545, 1337, 8546, 26656]
-}
-
-// to allow all ports to outside, set to [0]
-variable "PORTS_OUT" {
-  default = [0]
+  type = list
 }
