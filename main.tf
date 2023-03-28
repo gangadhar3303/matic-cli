@@ -1,95 +1,52 @@
-# Provider and Terraform Configuration 
+module "aws" {
+  source = "./aws_tf"
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "4.55.0"
-    }
-  }
-  required_version = ">= 1.2.0"
+  AWS_PROFILE           = var.AWS_PROFILE
+  VM_NAME               = var.VM_NAME
+  DISK_SIZE_GB          = var.DISK_SIZE_GB
+  ARCHIVE_DISK_SIZE_GB  = var.ARCHIVE_DISK_SIZE_GB
+  IOPS                  = var.IOPS
+  ARCHIVE_IOPS          = var.ARCHIVE_IOPS
+  VOLUME_TYPE           = var.VOLUME_TYPE
+  ARCHIVE_VOLUME_TYPE   = var.ARCHIVE_VOLUME_TYPE
+  DOCKERIZED            = var.DOCKERIZED
+  VALIDATOR_COUNT       = var.VALIDATOR_COUNT
+  SENTRY_COUNT          = var.SENTRY_COUNT
+  ARCHIVE_COUNT         = var.ARCHIVE_COUNT
+  INSTANCE_TYPE         = var.INSTANCE_TYPE
+  ARCHIVE_INSTANCE_TYPE = var.ARCHIVE_INSTANCE_TYPE
+  INSTANCE_AMI          = var.INSTANCE_AMI
+  PEM_FILE              = var.PEM_FILE
+  REGION                = var.REGION
+  SG_CIDR_BLOCKS        = var.SG_CIDR_BLOCKS
+  SG_CIDR_BLOCKS_OUT    = var.SG_CIDR_BLOCKS_OUT
+  PORTS_IN              = var.PORTS_IN
+  PORTS_OUT             = var.PORTS_OUT
 }
 
-provider "google" {
-  project = var.PROJECT_ID
-  region  = var.REGION
-  zone    = var.ZONE
+module "gcp" {
+  source = "./gcp_tf"
+
+  PROJECT_ID           = var.PROJECT_ID
+  GCP_REGION               = var.GCP_REGION
+  ZONE                 = var.ZONE
+  NETWORK_NAME         = var.NETWORK_NAME
+  SUBNET_NAME          = var.SUBNET_NAME
+  SUBNET_CIDR_RANGE    = var.SUBNET_CIDR_RANGE
+  DISK_SIZE            = var.DISK_SIZE
+  DISK_TYPE            = var.DISK_TYPE
+  INSTANCE_NAME        = var.INSTANCE_NAME
+  MACHINE_TYPE         = var.MACHINE_TYPE
+  IMAGE                = var.IMAGE
+  FW_RULE_NAME         = var.FW_RULE_NAME
+  PORTS_LIST           = var.PORTS_LIST
+  GCP_DOCKERIZED           = var.GCP_DOCKERIZED
+  GCP_VALIDATOR_COUNT      = var.GCP_VALIDATOR_COUNT
+  GCP_SENTRY_COUNT         = var.GCP_SENTRY_COUNT
+  GCP_ARCHIVE_COUNT        = var.GCP_ARCHIVE_COUNT
+  USERS                = var.USERS
+  GCE_SSH_PUB_KEY_FILE = var.GCE_SSH_PUB_KEY_FILE
+  GCP_SG_CIDR_BLOCKS       = var.GCP_SG_CIDR_BLOCKS
+
 }
 
-# Network and Subnet Creation
-resource "google_compute_network" "vpc_network" {
-  name                    = var.NETWORK_NAME
-  auto_create_subnetworks = false
-  mtu                     = 1460
-}
-resource "google_compute_subnetwork" "public-subnetwork" {
-  name          = var.SUBNET_NAME
-  ip_cidr_range = var.SUBNET_CIDR_RANGE
-  region        = var.REGION
-  network       = google_compute_network.vpc_network.name
-
-}
-
-# Reserve Static IP Address
-resource "google_compute_address" "static_ip" {
-  count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT + var.ARCHIVE_COUNT)
-  name = format("%s-%s",var.VM_NAME, count.index)
-         
-}
-
-
-# GCP Compute VM using Machine Image
-resource "google_compute_instance" "node_server" {
-
-  count = (var.DOCKERIZED == "yes") ? 1 : (var.VALIDATOR_COUNT + var.SENTRY_COUNT)
-
-  name         = format("%s-%s",var.VM_NAME, count.index)
-  machine_type = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_MACHINE_TYPE: var.MACHINE_TYPE
-
-  boot_disk {
-    initialize_params {
-      image = var.INSTANCE_IMAGE
-      size = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_DISK_SIZE_GB : var.DISK_SIZE_GB
-      type = (count.index >= var.VALIDATOR_COUNT + var.SENTRY_COUNT) ? var.ARCHIVE_VOLUME_TYPE : var.VOLUME_TYPE
-    }
-  }
-
-  metadata = {
-    ssh-keys = "${var.USER}::${file(var.GCE_PUB_KEY_FILE)}"
-  }
-
-  network_interface {
-    network = google_compute_network.vpc_network.name
-    subnetwork = google_compute_subnetwork.public-subnetwork.name
-
-    access_config {
-      //IP
-      nat_ip = google_compute_address.static_ip[count.index].address
-    }
-  }
-  tags = ["matic-cli"]
-  labels = {
-    name = "polygon-matic"
-  }
-}
-
-resource "google_compute_firewall" "firewall_rules" {
-  name    = var.FW_RULE_NAME
-  network = google_compute_network.vpc_network.name
-
-  allow {
-    protocol = "tcp"
-    ports    = var.PORTS_LIST
-  }
-  source_ranges = var.SG_CIDR_BLOCKS
-}
-
-
-# output values
-output "public_ip" {
-  value = google_compute_address.static_ip.*.address
-}
-
-output "instance_ids" {
-  value = google_compute_instance.node_server.*.name 
-}
